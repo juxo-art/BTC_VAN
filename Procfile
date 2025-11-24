@@ -1,0 +1,1 @@
+web: gunicorn vanitygen_app.wsgi
