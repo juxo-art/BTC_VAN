@@ -12,14 +12,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY SETTINGS
 # ----------------------------
 
-# Secret key from environment
+# Secret key from environment (Render will store SECRET_KEY)
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-secret-key')
 
-# Debug mode from environment
+# Debug mode (Render will set DEBUG=False)
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-# Allowed hosts
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+# Allowed hosts (IMPORTANT for Render)
+ALLOWED_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+    "btc-van.onrender.com",   # Render domain
+]
 
 # ----------------------------
 # APPLICATION DEFINITION
