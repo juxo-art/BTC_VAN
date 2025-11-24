@@ -12,14 +12,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY SETTINGS
 # ----------------------------
 
-# Secret key: use environment variable, fallback to default (for local dev)
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-default-secret-key')
+# Secret key from environment
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-secret-key')
 
-# Debug: set via environment variable
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+# Debug mode from environment
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-# Hosts allowed to serve the app
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
+# Allowed hosts
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # ----------------------------
 # APPLICATION DEFINITION
@@ -108,5 +108,4 @@ USE_TZ = True
 # ----------------------------
 STATIC_URL = '/static/'
 
-# Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
