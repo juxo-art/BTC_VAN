@@ -1,36 +1,52 @@
 import time
-import multiprocessing
 import os
 import hashlib
 import ecdsa
-import base58  # ensure base58 is installed (pip install base58)
+import base58
 
-# ----------------------------
-# GLOBAL STOP FLAG
-# ----------------------------
-STOP_FLAG = multiprocessing.Value('b', False)
+# Single global stop flag (Render-compatible)
+STOP_FLAG = False
 
 
-# ----------------------------
-# FAST BTC ADDRESS GENERATOR (Legacy 1...)
-# ----------------------------
+def reset_stop_flag():
+    global STOP_FLAG
+    STOP_FLAG = False
+
+
+def stop_generation():
+    global STOP_FLAG
+    STOP_FLAG = True
+
+
 def private_key_to_address(private_key_hex):
+    """Return legacy P2PKH (starts with 1)"""
     private_key_bytes = bytes.fromhex(private_key_hex)
-
     sk = ecdsa.SigningKey.from_string(private_key_bytes, curve=ecdsa.SECP256k1)
     vk = sk.get_verifying_key()
-
     public_key = b'\04' + vk.to_string()
 
     sha = hashlib.sha256(public_key).digest()
-    ripe = hashlib.new('ripemd160', sha).digest()
+    ripe = hashlib.new("ripemd160", sha).digest()
 
-    prefix = b'\x00'  # Legacy P2PKH
-    payload = prefix + ripe
-
+    payload = b'\x00' + ripe
     checksum = hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
     final = payload + checksum
+    return base58.b58encode(final).decode()
 
+
+def private_key_to_p2sh_address(private_key_hex):
+    """Return P2SH (starts with 3)"""
+    private_key_bytes = bytes.fromhex(private_key_hex)
+    sk = ecdsa.SigningKey.from_string(private_key_bytes, curve=ecdsa.SECP256k1)
+    vk = sk.get_verifying_key()
+    public_key = b'\04' + vk.to_string()
+
+    sha = hashlib.sha256(public_key).digest()
+    ripe = hashlib.new("ripemd160", sha).digest()
+
+    payload = b'\x05' + ripe
+    checksum = hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
+    final = payload + checksum
     return base58.b58encode(final).decode()
 
 
@@ -38,161 +54,93 @@ def generate_private_key():
     return os.urandom(32).hex()
 
 
-# ----------------------------
-# WORKER FOR LEGACY MODE
-# ----------------------------
-def worker(prefix, suffix, max_tries, return_dict, worker_id, stop_flag):
+def search(prefix, suffix, max_tries, address_type="legacy"):
+    """
+    Single-threaded search engine for Render.com compatibility.
+    """
+    global STOP_FLAG
     tries = 0
-    start_time = time.time()
+    start = time.time()
 
     while tries < max_tries:
-        if stop_flag.value:
-            return
-
-        priv = generate_private_key()
-        addr = private_key_to_address(priv)
-
-        core = addr[1:].upper()
-
-        if prefix and not core.startswith(prefix):
-            tries += 1
-            continue
-        if suffix and not core.endswith(suffix):
-            tries += 1
-            continue
-
-        return_dict.update({
-            "address": addr,
-            "private_key": priv,
-            "tries": tries + 1,
-            "time": round(time.time() - start_time, 2),
-            "mode": "Legacy (1...)"
-        })
-
-        stop_flag.value = True
-        return
-
-    return
-
-
-# ----------------------------
-# WORKER FOR P2SH FALLBACK (3...)
-# ----------------------------
-def worker_p2sh(prefix, suffix, max_tries, return_dict, worker_id, stop_flag):
-    tries = 0
-    start_time = time.time()
-
-    while tries < max_tries:
-        if stop_flag.value:
-            return
+        if STOP_FLAG:
+            return {
+                "stopped": True,
+                "tries": tries,
+                "time": round(time.time() - start, 2)
+            }
 
         priv = generate_private_key()
 
-        private_key_bytes = bytes.fromhex(priv)
-        sk = ecdsa.SigningKey.from_string(private_key_bytes, curve=ecdsa.SECP256k1)
-        vk = sk.get_verifying_key()
-        public_key = b'\x04' + vk.to_string()
-
-        sha = hashlib.sha256(public_key).digest()
-        ripe = hashlib.new('ripemd160', sha).digest()
-
-        payload = b'\x05' + ripe  # P2SH
-        checksum = hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
-        addr = base58.b58encode(payload + checksum).decode()
+        # Generate address type
+        if address_type == "legacy":
+            addr = private_key_to_address(priv)
+        else:
+            addr = private_key_to_p2sh_address(priv)
 
         core = addr[1:].upper()
+        up_pre = prefix.upper()
+        up_suf = suffix.upper()
 
-        if prefix and not core.startswith(prefix):
+        # prefix check
+        if up_pre and not core.startswith(up_pre):
             tries += 1
             continue
-        if suffix and not core.endswith(suffix):
+
+        # suffix check
+        if up_suf and not core.endswith(up_suf):
             tries += 1
             continue
 
-        return_dict.update({
+        # FOUND
+        return {
             "address": addr,
             "private_key": priv,
             "tries": tries + 1,
-            "time": round(time.time() - start_time, 2),
-            "mode": "P2SH (3...)"
-        })
-        stop_flag.value = True
-        return
-
-    return
-
-
-# ----------------------------
-# MAIN GENERATION CONTROLLER
-# ----------------------------
-def generate_matching(prefix="", suffix="", max_tries=500000):
-    prefix = prefix.strip().upper()
-    suffix = suffix.strip().upper()
-
-    # ----------------------------
-    # LENGTH CHECKS
-    # ----------------------------
-    if len(prefix) > 4:
-        return {"error": True, "message": "Prefix too long, must be 4 characters or less to increase the chance of finding the matching address"}
-    if len(suffix) > 4:
-        return {"error": True, "message": "Suffix too long, must be 4 characters or less  to increase the chance of finding the matching address"}
-
-    manager = multiprocessing.Manager()
-    result = manager.dict()
-    STOP_FLAG.value = False
-
-    cpu_count = multiprocessing.cpu_count()
-
-    # --- LEGACY MODE ---
-    processes = []
-    for i in range(cpu_count):
-        p = multiprocessing.Process(
-            target=worker,
-            args=(prefix, suffix, max_tries, result, i, STOP_FLAG)
-        )
-        processes.append(p)
-        p.start()
-
-    for p in processes:
-        p.join()
-
-    if "address" in result:
-        return dict(result)
-
-        # --- P2SH FALLBACK ---
-    result.clear()
-    STOP_FLAG.value = False
-    processes = []
-    for i in range(cpu_count):
-        p = multiprocessing.Process(
-            target=worker_p2sh,
-            args=(prefix, suffix, max_tries, result, i, STOP_FLAG)
-        )
-        processes.append(p)
-        p.start()
-
-    for p in processes:
-        p.join()
-
-    if STOP_FLAG.value and "address" not in result:
-        return {
-            "stopped": True,
-            "tries": max_tries * cpu_count * 2,
-            "time": None
+            "time": round(time.time() - start, 2)
         }
 
-    if "address" not in result:
-        return {
-            "error": True,
-            "message": "No matching address found! Customize prefix/suffix and try again.",
-            "tries": max_tries * cpu_count * 2
-        }
-
-    return dict(result)
+    return None
 
 
-# ----------------------------
-# EXTERNAL STOP TRIGGER
-# ----------------------------
-def stop_generation():
-    STOP_FLAG.value = True
+def generate_matching(prefix="", suffix="", max_tries=200000):
+    """
+    Main generator (Render compatible)
+    """
+
+    prefix = (prefix or "").upper()
+    suffix = (suffix or "").upper()
+
+    # Limits for safety
+    if len(prefix) > 8:
+        return {"error": True, "message": "Prefix too long.", "tries": 0}
+    if len(suffix) > 8:
+        return {"error": True, "message": "Suffix too long.", "tries": 0}
+
+    reset_stop_flag()
+
+    # --- Try Legacy (1...) ---
+    result = search(prefix, suffix, max_tries, address_type="legacy")
+
+    if result and "address" in result:
+        result["mode"] = "Legacy (1...)"
+        return result
+
+    if result and result.get("stopped"):
+        return result
+
+    # --- Try P2SH (3...) ---
+    result = search(prefix, suffix, max_tries, address_type="p2sh")
+
+    if result and "address" in result:
+        result["mode"] = "P2SH (3...)"
+        return result
+
+    if result and result.get("stopped"):
+        return result
+
+    return {
+        "error": True,
+        "message": "No match found. Try shorter prefix/suffix.",
+        "tries": max_tries * 2
+    }
