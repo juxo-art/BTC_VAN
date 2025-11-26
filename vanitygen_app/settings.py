@@ -4,14 +4,16 @@ Django settings for vanitygen_app project.
 
 from pathlib import Path
 import os
+import dj_database_url
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+# ----------------------------
+# BASE DIRECTORY
+# ----------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ----------------------------
 # SECURITY SETTINGS
 # ----------------------------
-
 # Secret key from environment (Render will store SECRET_KEY)
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-secret-key')
 
@@ -68,17 +70,15 @@ TEMPLATES = [
 WSGI_APPLICATION = 'vanitygen_app.wsgi.application'
 
 # ----------------------------
-# DATABASE
+# DATABASE (Render-ready)
 # ----------------------------
+# This will use Render's DATABASE_URL automatically
+import dj_database_url
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'vanitygen_db'),
-        'USER': os.environ.get('DB_USER', 'postgres'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'Admin123'),
-        'HOST': os.environ.get('DB_HOST', 'localhost'),
-        'PORT': os.environ.get('DB_PORT', '5432'),
-    }
+    'default': dj_database_url.config(
+        default='postgres://postgres:Admin123@localhost:5432/vanitygen_db'
+    )
 }
 
 # ----------------------------
@@ -112,4 +112,7 @@ USE_TZ = True
 # ----------------------------
 STATIC_URL = '/static/'
 
+# ----------------------------
+# DEFAULT AUTO FIELD
+# ----------------------------
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
