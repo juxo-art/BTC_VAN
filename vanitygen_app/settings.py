@@ -6,16 +6,9 @@ from pathlib import Path
 import os
 import dj_database_url
 
-# ----------------------------
-# BASE DIRECTORY
-# ----------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# ----------------------------
-# SECURITY SETTINGS
-# ----------------------------
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-secret-key')
-
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = [
@@ -24,9 +17,6 @@ ALLOWED_HOSTS = [
     "btc-van.onrender.com",
 ]
 
-# ----------------------------
-# APPLICATION DEFINITION
-# ----------------------------
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -66,21 +56,31 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'vanitygen_app.wsgi.application'
 
-# ----------------------------
-# DATABASE (Render-ready)
-# ----------------------------
-# Will read DATABASE_URL from Render Environment Variables
-DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get("DATA_BASE_URL"),
-        conn_max_age=600,
-        ssl_require=True
-    )
-}
 
-# ----------------------------
-# PASSWORD VALIDATION
-# ----------------------------
+# -----------------------------------------------------
+# ✅ FIXED DATABASE CONFIGURATION (WORKS LOCALLY + RENDER)
+# -----------------------------------------------------
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+if DATABASE_URL:
+    # Render PostgreSQL
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True
+        )
+    }
+else:
+    # Local SQLite fallback
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -88,20 +88,10 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# ----------------------------
-# INTERNATIONALIZATION
-# ----------------------------
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# ----------------------------
-# STATIC FILES
-# ----------------------------
 STATIC_URL = '/static/'
-
-# ----------------------------
-# DEFAULT AUTO FIELD
-# ----------------------------
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
