@@ -14,17 +14,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ----------------------------
 # SECURITY SETTINGS
 # ----------------------------
-# Secret key from environment (Render will store SECRET_KEY)
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-secret-key')
 
-# Debug mode (Render will set DEBUG=False)
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-# Allowed hosts (IMPORTANT for Render)
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
-    "btc-van.onrender.com",   # Render domain
+    "btc-van.onrender.com",
 ]
 
 # ----------------------------
@@ -72,36 +69,23 @@ WSGI_APPLICATION = 'vanitygen_app.wsgi.application'
 # ----------------------------
 # DATABASE (Render-ready)
 # ----------------------------
-# This will use Render's DATABASE_URL automatically
-import dj_database_url
-
+# Will read DATABASE_URL from Render Environment Variables
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'vanitygen_db'),
-        'USER': os.environ.get('DB_USER', 'postgres'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'Admin123'),
-        'HOST': os.environ.get('DB_HOST', 'localhost'),  # <- will be set by Render
-        'PORT': os.environ.get('DB_PORT', '5432'),       # <- will be set by Render
-    }
+    'default': dj_database_url.config(
+        default=os.environ.get("DATA_BASE_URL"),
+        conn_max_age=600,
+        ssl_require=True
+    )
 }
 
 # ----------------------------
 # PASSWORD VALIDATION
 # ----------------------------
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
 # ----------------------------
