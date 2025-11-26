@@ -76,9 +76,14 @@ WSGI_APPLICATION = 'vanitygen_app.wsgi.application'
 import dj_database_url
 
 DATABASES = {
-    'default': dj_database_url.config(
-        default='postgres://postgres:Admin123@localhost:5432/vanitygen_db'
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('DB_NAME', 'vanitygen_db'),
+        'USER': os.environ.get('DB_USER', 'postgres'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'Admin123'),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),  # <- will be set by Render
+        'PORT': os.environ.get('DB_PORT', '5432'),       # <- will be set by Render
+    }
 }
 
 # ----------------------------
