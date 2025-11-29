@@ -142,8 +142,25 @@ document.getElementById("generateBtn").onclick = async function () {
   `;
 };
 
+// ✅ FIXED STOP BUTTON — now updates UI immediately
 document.getElementById("stopBtn").onclick = async function () {
-  await fetch("/stop/", { method: "POST" });
+  const stop = document.getElementById("stopBtn");
+  const spin = document.getElementById("spinner");
+  const result = document.getElementById("result");
+
+  stop.disabled = true;
+  spin.style.display = "none";
+
+  const res = await fetch("/stop/", { method: "POST" });
+  const j = await res.json().catch(() => ({}));
+
+  result.innerHTML = `
+    <div class="alert alert-info">
+      ⛔ Generation stopped.<br>
+      ${j.tries ? "Tries: " + j.tries + "<br>" : ""}
+      ${j.time ? "Time: " + j.time.toFixed(2) + "s" : ""}
+    </div>
+  `;
 };
 </script>
 
