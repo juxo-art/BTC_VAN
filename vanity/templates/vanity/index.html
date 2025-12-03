@@ -41,7 +41,7 @@
 
   <b>Security Notice:</b> Never share your private key. Store it securely.
   Anyone with the private key can control the funds. This tool does not hold or save
-    users generated private keys
+  users generated private keys.
 </div>
 
   <form id="genForm">
@@ -98,10 +98,9 @@ document.getElementById("generateBtn").onclick = async function () {
   const j = await res.json();
 
   spin.style.display = "none";
-  btn.disabled = false;
-  stop.disabled = true;
+  btn.disabled = false;      // <-- RE-ENABLE generate button
+  stop.disabled = true;      // <-- Disable stop button again
 
-  // User pressed STOP
   if (j.stopped) {
     result.innerHTML = `
       <div class="alert alert-info">
@@ -113,7 +112,6 @@ document.getElementById("generateBtn").onclick = async function () {
     return;
   }
 
-  // Error message
   if (j.error) {
     result.innerHTML = `
       <div class="alert alert-danger">
@@ -123,7 +121,6 @@ document.getElementById("generateBtn").onclick = async function () {
     return;
   }
 
-  // Success
   result.innerHTML = `
     <div class="card p-3">
       <h5 class="mb-3">Generated Address</h5>
@@ -142,14 +139,15 @@ document.getElementById("generateBtn").onclick = async function () {
   `;
 };
 
-// ✅ FIXED STOP BUTTON — now updates UI immediately
 document.getElementById("stopBtn").onclick = async function () {
+  const btn = document.getElementById("generateBtn");
   const stop = document.getElementById("stopBtn");
   const spin = document.getElementById("spinner");
   const result = document.getElementById("result");
 
   stop.disabled = true;
   spin.style.display = "none";
+  btn.disabled = false;   // <-- RE-ENABLE generate button immediately
 
   const res = await fetch("/stop/", { method: "POST" });
   const j = await res.json().catch(() => ({}));
