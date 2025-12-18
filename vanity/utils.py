@@ -12,6 +12,26 @@ STOP_FLAG = multiprocessing.Value('b', False)
 
 
 # ----------------------------
+# HELPER: Convert hex private key to WIF
+# ----------------------------
+def private_key_to_wif(private_key_hex, compressed=False):
+    """
+    Convert a hex private key to WIF format.
+    compressed: True if the corresponding public key should be compressed (starts with K/L)
+    """
+    key_bytes = bytes.fromhex(private_key_hex)
+    prefix = b'\x80'  # Bitcoin mainnet prefix
+
+    if compressed:
+        key_bytes += b'\x01'
+
+    payload = prefix + key_bytes
+    checksum = hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
+    wif = base58.b58encode(payload + checksum).decode()
+    return wif
+
+
+# ----------------------------
 # FAST BTC ADDRESS GENERATOR (Legacy 1...)
 # ----------------------------
 def private_key_to_address(private_key_hex):
@@ -49,8 +69,9 @@ def worker(prefix, suffix, max_tries, return_dict, worker_id, stop_flag):
         if stop_flag.value:
             return
 
-        priv = generate_private_key()
-        addr = private_key_to_address(priv)
+        raw_priv = generate_private_key()
+        priv = private_key_to_wif(raw_priv, compressed=False)  # Standard WIF for Legacy addresses
+        addr = private_key_to_address(raw_priv)
 
         core = addr[1:].upper()
 
@@ -86,9 +107,9 @@ def worker_p2sh(prefix, suffix, max_tries, return_dict, worker_id, stop_flag):
         if stop_flag.value:
             return
 
-        priv = generate_private_key()
-
-        private_key_bytes = bytes.fromhex(priv)
+        raw_priv = generate_private_key()
+        priv = private_key_to_wif(raw_priv, compressed=False)  # Standard WIF for P2SH
+        private_key_bytes = bytes.fromhex(raw_priv)
         sk = ecdsa.SigningKey.from_string(private_key_bytes, curve=ecdsa.SECP256k1)
         vk = sk.get_verifying_key()
         public_key = b'\x04' + vk.to_string()
