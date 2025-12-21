@@ -15,20 +15,15 @@ STOP_FLAG = multiprocessing.Value('b', False)
 # HELPER: Convert hex private key to WIF
 # ----------------------------
 def private_key_to_wif(private_key_hex, compressed=False):
-    """
-    Convert a hex private key to WIF format.
-    compressed: True if the corresponding public key should be compressed (starts with K/L)
-    """
     key_bytes = bytes.fromhex(private_key_hex)
-    prefix = b'\x80'  # Bitcoin mainnet prefix
+    prefix = b'\x80'
 
     if compressed:
         key_bytes += b'\x01'
 
     payload = prefix + key_bytes
     checksum = hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
-    wif = base58.b58encode(payload + checksum).decode()
-    return wif
+    return base58.b58encode(payload + checksum).decode()
 
 
 # ----------------------------
@@ -36,22 +31,17 @@ def private_key_to_wif(private_key_hex, compressed=False):
 # ----------------------------
 def private_key_to_address(private_key_hex):
     private_key_bytes = bytes.fromhex(private_key_hex)
-
     sk = ecdsa.SigningKey.from_string(private_key_bytes, curve=ecdsa.SECP256k1)
     vk = sk.get_verifying_key()
 
     public_key = b'\04' + vk.to_string()
-
     sha = hashlib.sha256(public_key).digest()
     ripe = hashlib.new('ripemd160', sha).digest()
 
-    prefix = b'\x00'  # Legacy P2PKH
-    payload = prefix + ripe
-
+    payload = b'\x00' + ripe
     checksum = hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
-    final = payload + checksum
 
-    return base58.b58encode(final).decode()
+    return base58.b58encode(payload + checksum).decode()
 
 
 def generate_private_key():
@@ -70,7 +60,7 @@ def worker(prefix, suffix, max_tries, return_dict, worker_id, stop_flag):
             return
 
         raw_priv = generate_private_key()
-        priv = private_key_to_wif(raw_priv, compressed=False)  # Standard WIF for Legacy addresses
+        priv = private_key_to_wif(raw_priv, compressed=False)
         addr = private_key_to_address(raw_priv)
 
         core = addr[1:].upper()
@@ -93,8 +83,6 @@ def worker(prefix, suffix, max_tries, return_dict, worker_id, stop_flag):
         stop_flag.value = True
         return
 
-    return
-
 
 # ----------------------------
 # WORKER FOR P2SH FALLBACK (3...)
@@ -108,8 +96,9 @@ def worker_p2sh(prefix, suffix, max_tries, return_dict, worker_id, stop_flag):
             return
 
         raw_priv = generate_private_key()
-        priv = private_key_to_wif(raw_priv, compressed=False)  # Standard WIF for P2SH
+        priv = private_key_to_wif(raw_priv, compressed=False)
         private_key_bytes = bytes.fromhex(raw_priv)
+
         sk = ecdsa.SigningKey.from_string(private_key_bytes, curve=ecdsa.SECP256k1)
         vk = sk.get_verifying_key()
         public_key = b'\x04' + vk.to_string()
@@ -117,7 +106,7 @@ def worker_p2sh(prefix, suffix, max_tries, return_dict, worker_id, stop_flag):
         sha = hashlib.sha256(public_key).digest()
         ripe = hashlib.new('ripemd160', sha).digest()
 
-        payload = b'\x05' + ripe  # P2SH
+        payload = b'\x05' + ripe
         checksum = hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
         addr = base58.b58encode(payload + checksum).decode()
 
@@ -137,10 +126,9 @@ def worker_p2sh(prefix, suffix, max_tries, return_dict, worker_id, stop_flag):
             "time": round(time.time() - start_time, 2),
             "mode": "P2SH (3...)"
         })
+
         stop_flag.value = True
         return
-
-    return
 
 
 # ----------------------------
@@ -150,13 +138,10 @@ def generate_matching(prefix="", suffix="", max_tries=500000):
     prefix = prefix.strip().upper()
     suffix = suffix.strip().upper()
 
-    # ----------------------------
-    # LENGTH CHECKS
-    # ----------------------------
     if len(prefix) > 4:
-        return {"error": True, "message": "Prefix too long, must be 4 characters or less to increase the chance of finding the matching address"}
+        return {"error": True, "message": "Prefix too long (max 4 characters)"}
     if len(suffix) > 4:
-        return {"error": True, "message": "Suffix too long, must be 4 characters or less  to increase the chance of finding the matching address"}
+        return {"error": True, "message": "Suffix too long (max 4 characters)"}
 
     manager = multiprocessing.Manager()
     result = manager.dict()
@@ -164,49 +149,51 @@ def generate_matching(prefix="", suffix="", max_tries=500000):
 
     cpu_count = multiprocessing.cpu_count()
 
-    # --- LEGACY MODE ---
-    processes = []
-    for i in range(cpu_count):
-        p = multiprocessing.Process(
-            target=worker,
-            args=(prefix, suffix, max_tries, result, i, STOP_FLAG)
-        )
-        processes.append(p)
-        p.start()
+    def run_processes(target):
+        processes = []
+        for i in range(cpu_count):
+            p = multiprocessing.Process(
+                target=target,
+                args=(prefix, suffix, max_tries, result, i, STOP_FLAG)
+            )
+            p.start()
+            processes.append(p)
 
-    for p in processes:
-        p.join()
+        # 🔥 NON-BLOCKING WAIT
+        while True:
+            if STOP_FLAG.value:
+                for p in processes:
+                    if p.is_alive():
+                        p.terminate()
+                break
+
+            if not any(p.is_alive() for p in processes):
+                break
+
+            time.sleep(0.05)
+
+        for p in processes:
+            p.join(timeout=0.1)
+
+    # --- LEGACY MODE ---
+    run_processes(worker)
 
     if "address" in result:
         return dict(result)
 
-        # --- P2SH FALLBACK ---
+    # --- P2SH FALLBACK ---
     result.clear()
     STOP_FLAG.value = False
-    processes = []
-    for i in range(cpu_count):
-        p = multiprocessing.Process(
-            target=worker_p2sh,
-            args=(prefix, suffix, max_tries, result, i, STOP_FLAG)
-        )
-        processes.append(p)
-        p.start()
-
-    for p in processes:
-        p.join()
+    run_processes(worker_p2sh)
 
     if STOP_FLAG.value and "address" not in result:
-        return {
-            "stopped": True,
-            "tries": max_tries * cpu_count * 2,
-            "time": None
-        }
+        return {"stopped": True, "tries": None, "time": None}
 
     if "address" not in result:
         return {
             "error": True,
-            "message": "No matching address found! Customize prefix/suffix and try again.",
-            "tries": max_tries * cpu_count * 2
+            "message": "No matching address found",
+            "tries": None
         }
 
     return dict(result)
