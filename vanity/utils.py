@@ -143,11 +143,16 @@ def generate_matching(prefix="", suffix="", max_tries=500000):
     if len(suffix) > 4:
         return {"error": True, "message": "Suffix too long (max 4 characters)"}
 
+    # Dynamically reduce tries for long prefix/suffix
+    if len(prefix) + len(suffix) >= 3:
+        max_tries = min(max_tries, 100000)
+
     manager = multiprocessing.Manager()
     result = manager.dict()
     STOP_FLAG.value = False
 
-    cpu_count = multiprocessing.cpu_count()
+    # Limit process count to 2 to prevent Render worker OOM
+    cpu_count = min(2, multiprocessing.cpu_count())
 
     def run_processes(target):
         processes = []
@@ -159,7 +164,6 @@ def generate_matching(prefix="", suffix="", max_tries=500000):
             p.start()
             processes.append(p)
 
-        # 🔥 NON-BLOCKING WAIT
         while True:
             if STOP_FLAG.value:
                 for p in processes:
@@ -187,7 +191,7 @@ def generate_matching(prefix="", suffix="", max_tries=500000):
     run_processes(worker_p2sh)
 
     if STOP_FLAG.value and "address" not in result:
-        return {"stopped": True, "tries": None, "time": None}
+        return {"stopped": True, "tries": None, "time": None, "message": "Generating stopped"}
 
     if "address" not in result:
         return {
